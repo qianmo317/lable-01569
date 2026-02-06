@@ -15,7 +15,7 @@ const config: DataSourceOptions = {
   password: process.env.DB_PASSWORD || 'campus_password',
   database: process.env.DB_DATABASE || 'campus_trading',
   entities: [User, Item, Category, Transaction, SharedResource, ResourceBorrow, Message],
-  synchronize: true,
+  synchronize: process.env.NODE_ENV === 'development' || process.env.DB_SYNCHRONIZE === 'true',
   logging: process.env.NODE_ENV === 'development',
   charset: 'utf8mb4',
 };

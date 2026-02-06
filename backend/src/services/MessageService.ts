@@ -1,6 +1,7 @@
 import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Message, MessageType } from '../entities/Message';
+import { User } from '../entities/User';
 import { ApiError } from '../middlewares/errorHandler';
 
 export interface SendMessageDto {
@@ -22,14 +23,24 @@ export interface ConversationSummary {
 
 export class MessageService {
   private messageRepository: Repository<Message>;
+  private userRepository: Repository<User>;
 
   constructor() {
     this.messageRepository = AppDataSource.getRepository(Message);
+    this.userRepository = AppDataSource.getRepository(User);
   }
 
   async send(senderId: number, dto: SendMessageDto): Promise<Message> {
     if (senderId === dto.receiverId) {
       throw new ApiError(400, '不能给自己发送消息');
+    }
+
+    // Validate receiver exists
+    const receiver = await this.userRepository.findOne({
+      where: { id: dto.receiverId },
+    });
+    if (!receiver) {
+      throw new ApiError(404, '接收者不存在');
     }
 
     const message = this.messageRepository.create({

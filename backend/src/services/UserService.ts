@@ -94,12 +94,12 @@ export class UserService {
   }
 
   async login(dto: LoginDto): Promise<{ user: UserResponse; token: string }> {
-    const user = await this.userRepository.findOne({
-      where: [
-        { username: dto.username },
-        { email: dto.username },
-      ],
-    });
+    // Explicitly select password field for authentication
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password')
+      .where('user.username = :username OR user.email = :username', { username: dto.username })
+      .getOne();
 
     if (!user) {
       throw new ApiError(401, '用户名或密码错误');
@@ -150,9 +150,12 @@ export class UserService {
     oldPassword: string,
     newPassword: string
   ): Promise<void> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-    });
+    // Explicitly select password field for verification
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password')
+      .where('user.id = :userId', { userId })
+      .getOne();
 
     if (!user) {
       throw new ApiError(404, '用户不存在');
@@ -188,8 +191,12 @@ export class UserService {
       throw new ApiError(404, '用户不存在');
     }
 
+    // Use integer-based calculation to avoid floating point precision issues
+    // Store rating as sum internally, calculate average on read
+    const currentTotal = Math.round(Number(user.rating) * user.ratingCount * 100);
     const newRatingCount = user.ratingCount + 1;
-    const newRating = (Number(user.rating) * user.ratingCount + rating) / newRatingCount;
+    const newTotal = currentTotal + Math.round(rating * 100);
+    const newRating = newTotal / (newRatingCount * 100);
 
     user.rating = parseFloat(newRating.toFixed(2));
     user.ratingCount = newRatingCount;

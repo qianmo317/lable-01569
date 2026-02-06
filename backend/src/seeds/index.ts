@@ -4,6 +4,12 @@ import { User, UserRole, UserStatus } from '../entities/User';
 import { Category } from '../entities/Category';
 
 export const seedDatabase = async (): Promise<void> => {
+  // Skip seeding in production unless explicitly enabled
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_SEED !== 'true') {
+    console.log('⏭️  Skipping seed in production environment');
+    return;
+  }
+
   console.log('🌱 Checking seed data...');
 
   const userRepository = AppDataSource.getRepository(User);

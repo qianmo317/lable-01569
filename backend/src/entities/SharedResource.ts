@@ -45,7 +45,7 @@ export class SharedResource {
   @Column({ type: 'enum', enum: ResourceStatus, default: ResourceStatus.AVAILABLE })
   status!: ResourceStatus;
 
-  @Column({ type: 'simple-array', nullable: true })
+  @Column({ type: 'json', nullable: true })
   images?: string[];
 
   @Column({ type: 'varchar', length: 255, nullable: true })

@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { SharedResource, ResourceStatus, ResourceType } from '../entities/SharedResource';
 import { ResourceBorrow, BorrowStatus } from '../entities/ResourceBorrow';
@@ -331,30 +331,63 @@ export class SharedResourceService {
   }
 
   async startBorrow(id: number, ownerId: number): Promise<ResourceBorrow> {
-    const borrow = await this.findBorrowById(id);
+    // Use transaction with pessimistic lock to prevent race conditions
+    return await AppDataSource.transaction(async (manager: EntityManager) => {
+      const borrowRepo = manager.getRepository(ResourceBorrow);
+      const resourceRepo = manager.getRepository(SharedResource);
 
-    if (borrow.ownerId !== ownerId) {
-      throw new ApiError(403, '无权操作此借用请求');
-    }
+      // Lock the borrow record
+      const borrow = await borrowRepo.findOne({
+        where: { id },
+        relations: ['resource', 'borrower', 'owner'],
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    if (borrow.status !== BorrowStatus.APPROVED) {
-      throw new ApiError(400, '当前状态不能开始借用');
-    }
+      if (!borrow) {
+        throw new ApiError(404, '借用记录不存在');
+      }
 
-    borrow.status = BorrowStatus.BORROWED;
+      if (borrow.ownerId !== ownerId) {
+        throw new ApiError(403, '无权操作此借用请求');
+      }
 
-    // Update resource status
-    await this.resourceRepository.update(
-      { id: borrow.resourceId },
-      { status: ResourceStatus.BORROWED }
-    );
+      if (borrow.status !== BorrowStatus.APPROVED) {
+        throw new ApiError(400, '当前状态不能开始借用');
+      }
 
-    // Increment borrow count
-    await this.resourceRepository.increment({ id: borrow.resourceId }, 'borrowCount', 1);
+      // Lock the resource and check if it's still available
+      const resource = await resourceRepo.findOne({
+        where: { id: borrow.resourceId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    await this.borrowRepository.save(borrow);
+      if (!resource || resource.status !== ResourceStatus.AVAILABLE) {
+        throw new ApiError(400, '资源已被其他借用占用');
+      }
 
-    return this.findBorrowById(id);
+      // Check if there's already an active borrow for this resource
+      const existingBorrow = await borrowRepo.findOne({
+        where: {
+          resourceId: borrow.resourceId,
+          status: BorrowStatus.BORROWED,
+        },
+      });
+
+      if (existingBorrow) {
+        throw new ApiError(400, '该资源已有进行中的借用');
+      }
+
+      borrow.status = BorrowStatus.BORROWED;
+
+      // Update resource status
+      resource.status = ResourceStatus.BORROWED;
+      resource.borrowCount += 1;
+      await resourceRepo.save(resource);
+
+      await borrowRepo.save(borrow);
+
+      return borrow;
+    });
   }
 
   async returnResource(id: number, borrowerId: number): Promise<ResourceBorrow> {

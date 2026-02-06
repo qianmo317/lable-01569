@@ -77,6 +77,11 @@ export class ItemService {
       throw new ApiError(404, '物品不存在');
     }
 
+    // Don't return removed items to regular queries
+    if (item.status === ItemStatus.REMOVED) {
+      throw new ApiError(404, '物品不存在');
+    }
+
     return item;
   }
 

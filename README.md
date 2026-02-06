@@ -6,6 +6,14 @@
 
 ```bash
 # 克隆项目后，在根目录执行
+
+# 1. 复制环境变量配置文件
+cp .env.example .env
+
+# 2. 编辑 .env 文件，设置必要的环境变量（特别是 JWT_SECRET）
+# JWT_SECRET 必须至少 32 个字符
+
+# 3. 启动服务
 docker compose up --build -d
 
 # 查看运行状态
@@ -30,7 +38,11 @@ npm install
 
 #### 配置环境变量
 
-根据 `.env.example` 文件创建 `.env`（如需）。
+复制 `.env.example` 文件并重命名为 `.env`，根据实际情况修改配置：
+
+```bash
+cp .env.example .env
+```
 
 #### 启动开发服务
 
@@ -52,6 +64,8 @@ npm start        # 启动编译后的服务
 ### 服务启动后
 
 - 后端 API 服务: http://localhost:3000
+- API 文档 (Swagger UI): http://localhost:3000/api-docs
+- OpenAPI 规范 (JSON): http://localhost:3000/api-docs.json
 - 健康检查: http://localhost:3000/health
 - MySQL 数据库: localhost:3307
 
@@ -62,7 +76,20 @@ npm start        # 启动编译后的服务
 | backend | 3000 | Node.js 后端 API 服务 |
 | mysql | 3307 | MySQL 8.0 数据库服务 |
 
+## 环境变量说明
+
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| JWT_SECRET | 是(生产) | - | JWT 密钥，生产环境必须设置且至少32字符 |
+| NODE_ENV | 否 | development | 运行环境 |
+| DB_SYNCHRONIZE | 否 | false | 是否自动同步数据库结构 |
+| ENABLE_SEED | 否 | false | 是否启用种子数据 |
+| CORS_ORIGINS | 否 | http://localhost:3000 | 允许的跨域来源 |
+| RATE_LIMIT_MAX | 否 | 100 | 速率限制：每窗口最大请求数 |
+
 ## 测试账号
+
+> ⚠️ 测试账号仅在开发环境且 `ENABLE_SEED=true` 时创建
 
 | 用户名 | 密码 | 角色 | 说明 |
 |--------|------|------|------|
@@ -253,6 +280,8 @@ backend/
 5. **参数验证**：使用 express-validator 进行请求参数校验
 6. **错误处理**：统一的错误处理中间件
 7. **Docker 容器化**：支持跨平台（ARM/x86）部署
+8. **安全防护**：速率限制、CORS 配置、敏感数据保护
+9. **并发控制**：交易和借用流程使用悲观锁防止竞态条件
 
 ### API 使用示例
 

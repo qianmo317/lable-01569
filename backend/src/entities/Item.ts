@@ -53,7 +53,7 @@ export class Item {
   @Column({ type: 'enum', enum: ItemStatus, default: ItemStatus.AVAILABLE })
   status!: ItemStatus;
 
-  @Column({ type: 'simple-array', nullable: true })
+  @Column({ type: 'json', nullable: true })
   images?: string[];
 
   @Column({ type: 'varchar', length: 255, nullable: true })

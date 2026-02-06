@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Transaction, TransactionStatus, PaymentMethod } from '../entities/Transaction';
 import { Item, ItemStatus } from '../entities/Item';
@@ -101,30 +101,65 @@ export class TransactionService {
   }
 
   async accept(id: number, sellerId: number, dto?: UpdateTransactionDto): Promise<Transaction> {
-    const transaction = await this.findById(id);
+    // Use transaction with pessimistic lock to prevent race conditions
+    return await AppDataSource.transaction(async (manager: EntityManager) => {
+      const transactionRepo = manager.getRepository(Transaction);
+      const itemRepo = manager.getRepository(Item);
 
-    if (transaction.sellerId !== sellerId) {
-      throw new ApiError(403, '无权操作此交易');
-    }
+      // Lock the transaction row
+      const transaction = await transactionRepo.findOne({
+        where: { id },
+        relations: ['item', 'buyer', 'seller'],
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    if (transaction.status !== TransactionStatus.PENDING) {
-      throw new ApiError(400, '当前状态不能接受交易');
-    }
+      if (!transaction) {
+        throw new ApiError(404, '交易不存在');
+      }
 
-    transaction.status = TransactionStatus.ACCEPTED;
-    if (dto) {
-      Object.assign(transaction, dto);
-    }
+      if (transaction.sellerId !== sellerId) {
+        throw new ApiError(403, '无权操作此交易');
+      }
 
-    // Update item status to reserved
-    await this.itemRepository.update(
-      { id: transaction.itemId },
-      { status: ItemStatus.RESERVED }
-    );
+      if (transaction.status !== TransactionStatus.PENDING) {
+        throw new ApiError(400, '当前状态不能接受交易');
+      }
 
-    await this.transactionRepository.save(transaction);
+      // Lock the item and check if it's still available
+      const item = await itemRepo.findOne({
+        where: { id: transaction.itemId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    return this.findById(id);
+      if (!item || item.status !== ItemStatus.AVAILABLE) {
+        throw new ApiError(400, '物品已被其他交易占用');
+      }
+
+      // Check if there's already an accepted transaction for this item
+      const existingAccepted = await transactionRepo.findOne({
+        where: {
+          itemId: transaction.itemId,
+          status: TransactionStatus.ACCEPTED,
+        },
+      });
+
+      if (existingAccepted) {
+        throw new ApiError(400, '该物品已有进行中的交易');
+      }
+
+      transaction.status = TransactionStatus.ACCEPTED;
+      if (dto) {
+        Object.assign(transaction, dto);
+      }
+
+      // Update item status to reserved
+      item.status = ItemStatus.RESERVED;
+      await itemRepo.save(item);
+
+      await transactionRepo.save(transaction);
+
+      return transaction;
+    });
   }
 
   async reject(id: number, sellerId: number, note?: string): Promise<Transaction> {

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { config } from '../config';
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -7,11 +8,17 @@ export interface AppError extends Error {
 
 export const errorHandler = (
   err: AppError,
-  req: Request,
+  _req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-  console.error('Error:', err);
+  // Log error for debugging (consider using a proper logger in production)
+  if (!config.isProduction) {
+    console.error('Error:', err);
+  } else {
+    // In production, log only essential info without stack trace
+    console.error('Error:', err.message);
+  }
 
   const statusCode = err.statusCode || 500;
   const message = err.isOperational ? err.message : '服务器内部错误';
@@ -19,7 +26,8 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    // Never expose stack trace in production, regardless of NODE_ENV check
+    ...(!config.isProduction && { stack: err.stack }),
   });
 };
 
