@@ -239,7 +239,7 @@ export class TransactionService {
     // Update item status to sold
     await this.itemRepository.update(
       { id: transaction.itemId },
-      { status: ItemStatus.AVAILABLE }
+      { status: ItemStatus.SOLD }
     );
 
     await this.transactionRepository.save(transaction);
